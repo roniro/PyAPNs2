@@ -5,7 +5,7 @@ import logging
 from enum import Enum
 from typing import Dict, Iterable, Optional, Tuple, Union
 
-from .credentials import TokenCredentials
+from .credentials import Credentials, CertificateCredentials, TokenCredentials
 from .errors import exception_class_for_reason
 # We don't generally need to know about the Credentials subclasses except to
 # keep the old API, where APNsClient took a cert_file
@@ -44,13 +44,17 @@ class APNsClient(object):
     ALTERNATIVE_PORT = 2197
 
     def __init__(self,
-                 credentials: TokenCredentials,
+                 credentials: Union[Credentials, str],
                  use_sandbox: bool = False, use_alternative_port: bool = False, proto: Optional[str] = None,
                  json_encoder: Optional[type] = None, password: Optional[str] = None,
                  proxy_host: Optional[str] = None, proxy_port: Optional[int] = None,
                  heartbeat_period: Optional[float] = None) -> None:
 
-        self.__credentials = credentials
+        if isinstance(credentials, str):
+            self.__credentials = CertificateCredentials(credentials, password)
+        else:
+            self.__credentials = credentials
+
         self._init_connection(use_sandbox, use_alternative_port, proto, proxy_host, proxy_port)
 
         if heartbeat_period:
@@ -113,9 +117,10 @@ class APNsClient(object):
         if expiration is not None:
             headers['apns-expiration'] = '%d' % expiration
 
-        auth_header = self.__credentials.get_authorization_header(topic)
-        if auth_header is not None:
-            headers['authorization'] = auth_header
+        if isinstance(self.__credentials, TokenCredentials):
+            auth_header = self.__credentials.get_authorization_header(topic)
+            if auth_header is not None:
+                headers['authorization'] = auth_header
 
         if collapse_id is not None:
             headers['apns-collapse-id'] = collapse_id
@@ -148,7 +153,7 @@ class APNsClient(object):
         results = {}
 
         # Loop over notifications
-        with httpx.Client(http2=True) as client:
+        with httpx.Client(http2=True, verify=self.__credentials.ssl_context) as client:
             for next_notification in notifications:
                 logger.info('Sending to token %s', next_notification.token)
                 status, reason = self.send_notification_sync(next_notification.token, next_notification.payload, client,
