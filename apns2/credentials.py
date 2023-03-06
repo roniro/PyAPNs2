@@ -23,6 +23,7 @@ class CertificateCredentials(Credentials):
     def __init__(self, cert_file: Optional[str] = None, password: Optional[str] = None) -> None:
         ssl_context = ssl.create_default_context()
         ssl_context.load_cert_chain(cert_file, password=password)
+        self.cert_file = cert_file
         super(CertificateCredentials, self).__init__(ssl_context)
 
 
@@ -36,6 +37,7 @@ class TokenCredentials(Credentials):
         self.__team_id = team_id
         self.__encryption_algorithm = encryption_algorithm
         self.__token_lifetime = token_lifetime
+        self.cert_file = None
 
         self.__jwt_token = None  # type: Optional[Tuple[float, str]]
 
